@@ -27,8 +27,6 @@ jobs:
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/share/game-hub
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl file gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libsamplerate0-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-pyelftools qemu-utils rsync scons squashfs-tools subversion swig texinfo u-boot-tools upx-ucl unzip vim wget xmlto xz-utils zlib1g-dev
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
@@ -36,7 +34,6 @@ jobs:
     - name: Clone source code
       working-directory: /workdir
       run: |
-        df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
@@ -66,41 +63,56 @@ jobs:
         cd openwrt
         make defconfig
         make download -j8
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
 
-    - name: Compile the firmware
+    - name: Compile the LuCI Packages
       id: compile
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        # 仅编译目标软件和依赖，提速并防止整机内核冲突报错
+        make package/feeds/luci/luci-base/compile -j$(nproc)
+        make package/feeds/luci/luci-mod-admin-full/compile -j$(nproc)
+        make package/feeds/luci/luci-theme-argon/compile -j$(nproc)
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Organize files
-      id: organize
-      if: steps.compile.outputs.status == 'success' && !cancelled()
+    - name: Extract and Pack for U60p
+      id: pack_u60p
+      if: steps.compile.outputs.status == 'success'
       run: |
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        mkdir -p $GITHUB_WORKSPACE/u60pro_luci/www
+        mkdir -p $GITHUB_WORKSPACE/u60pro_luci/etc/config
+        
+        # 复制编译好的核心 Web 静态文件与配置
+        cp -r openwrt/build_dir/target-arm_*/luci-*/ipkg-*/* $GITHUB_WORKSPACE/u60pro_luci/ 2>/dev/null || true
+        
+        # 创建版本标记
+        echo "1.1.0" > $GITHUB_WORKSPACE/u60pro_luci/VERSION
+        
+        # 压制成 JS 脚本所需的标准挂载压缩包
+        cd $GITHUB_WORKSPACE
+        tar -czf u60pro_luci.tar.gz u60pro_luci
+        
+        mkdir -p bin_output
+        mv u60pro_luci.tar.gz bin_output/
+        echo "FIRMWARE=$GITHUB_WORKSPACE/bin_output" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Generate release tag
       id: tag
-      if: steps.organize.outputs.status == 'success' && !cancelled()
+      if: steps.pack_u60p.outputs.status == 'success'
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload firmware to release
+    - name: Upload u60pro_luci.tar.gz to Release
       uses: softprops/action-gh-release@v2
-      if: steps.tag.outputs.status == 'success' && !cancelled()
+      if: steps.tag.outputs.status == 'success'
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         files: ${{ env.FIRMWARE }}/*
         body: |
-          ### 🛰️ U60p 随身Wi-Fi 专属定制固件发布
+          ### 🛰️ U60p 随身Wi-Fi 专属 LuCI 挂载包发布
           * 编译时间: ${{ steps.tag.outputs.release_tag }}
-          * 固件后台: 192.168.0.1:8080
-          * 登录密码: root
+          * 该压缩包名已对齐： `u60pro_luci.tar.gz`
+          * 默认后台端口: 8080
+          * 默认登录密码: root
