@@ -3,6 +3,10 @@ name: U60p Qualcomm Build
 on:
   workflow_dispatch:
 
+# 🔑 核心修正：直接在工作流级别强制开启 Release 写入权限
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -17,7 +21,7 @@ jobs:
         mkdir -p $GITHUB_WORKSPACE/u60pro_luci
         cd $GITHUB_WORKSPACE/u60pro_luci
 
-        # 1. 换用 23.05 稳定版通用轻量 rootfs 源，100% 保证下载成功
+        # 1. 换用稳定轻量组件源
         echo "[1/4] 下载官方轻量 LuCI 镜像核心..."
         wget -qO core.tar.gz https://downloads.immortalwrt.org/releases/23.05.3/targets/x86/64/immortalwrt-23.05.3-x86-64-rootfs.tar.gz
         tar -xzf core.tar.gz ./www ./etc/config ./usr/libexec/luci-bwc 2>/dev/null || true
@@ -63,7 +67,7 @@ jobs:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         files: ${{ env.FIRMWARE }}/*
         body: |
-          ### 🛰️ U60p 随身Wi-Fi 专属 LuCI 挂载包发布 (稳健直链版)
+          ### 🛰️ U60p 随身Wi-Fi 专属 LuCI 挂载包发布
           * 编译时间: ${{ steps.tag.outputs.release_tag }}
           * 文件包名: `u60pro_luci.tar.gz`
           * 默认网关: 192.168.0.1:8080
