@@ -1,4 +1,4 @@
-name: 云端强拆天灵面板并固化打包
+name: 全自动智能抓取天灵面板并固化打包
 
 on:
   workflow_dispatch:
@@ -12,63 +12,94 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: 1. 签出仓库文件
+    - name: 1. 签出仓库核心文件
       uses: actions/checkout@v3
 
-    - name: 2. 利用 Linux 祖宗级命令强拆 APK/IPK 包
+    - name: 2. 安装全能解压神器 (7-Zip Linux版)
       run: |
-        echo "=== 开始在 Linux 环境下强拆天灵核心 ==="
+        sudo apt-get update
+        sudo apt-get install -y p7zip-full curl wget
+
+    - name: 3. 智能追踪并强拆官网最新天灵核心
+      run: |
+        echo "=== 正在进入天灵官方高通大池子 ==="
         mkdir -p clean_root
         
-        # 1. 新建一个临时目录用来解压 luci-base
-        mkdir -p base_tmp
-        # 如果你上传的文件名叫 luci-base.apk，直接用 ar x 强拆（Linux 下 ar 是自带的必杀技，绝不提示加密）
-        if [ -f "luci-base.apk" ]; then
-          cp luci-base.apk base_tmp/ && cd base_tmp
-          ar x luci-base.apk 2>/dev/null || tar -xf luci-base.apk 2>/dev/null || true
-          [ -f "data.tar.gz" ] && tar -zxf data.tar.gz || true
-          [ -f "data.tar.xz" ] && tar -Jxf data.tar.xz || true
-          [ -d "www" ] && cp -r www ../clean_root/ || true
-          [ -d "usr" ] && cp -r usr ../clean_root/ || true
-          cd ..
+        # 抓取天灵快照官网的实时网页列表
+        curl -s https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/ > index.html
+        
+        # 【1. 自动化智能抓取 luci-base】
+        echo "正在智能搜寻 luci-base..."
+        BASE_NAME=$(grep -oE 'luci-base[-_][0-9a-zA-Z\._~-]+\.(apk|ipk)' index.html | head -n 1)
+        if [ -n "$BASE_NAME" ]; then
+          echo "成功抓取到今日最新文件: $BASE_NAME"
+          wget -q "https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/$BASE_NAME"
+          mkdir -p base_out
+          # 使用 7z 降维打击，无视 apk 或 ipk 强行提取内部所有层级
+          7z x "$BASE_NAME" -obase_out/ -y >/dev/null
+          if [ -f "base_out/data.tar.gz" ]; then 7z x base_out/data.tar.gz -obase_out/ -y >/dev/null; fi
+          if [ -f "base_out/data.tar.xz" ]; then 7z x base_out/data.tar.xz -obase_out/ -y >/dev/null; fi
+          # 提取出最深层的底层归档
+          find base_out/ -name "data.tar" -exec 7z x {} -obase_out/ -y \; >/dev/null
+          
+          # 复制真网页肉身
+          [ -d "base_out/www" ] && cp -r base_out/www clean_root/ || true
+          [ -d "base_out/usr" ] && cp -r base_out/usr clean_root/ || true
+        else
+          echo "错误：官网没有找到 luci-base！"
         fi
 
-        # 2. 同样的方法强拆 luci-mod
-        mkdir -p mod_tmp
-        if [ -f "luci-mod.apk" ]; then
-          cp luci-mod.apk mod_tmp/ && cd mod_tmp
-          ar x luci-mod.apk 2>/dev/null || tar -xf luci-mod.apk 2>/dev/null || true
-          [ -f "data.tar.gz" ] && tar -zxf data.tar.gz || true
-          [ -f "data.tar.xz" ] && tar -Jxf data.tar.xz || true
-          [ -d "www" ] && cp -r www/* ../clean_root/www/ 2>/dev/null || true
-          [ -d "usr" ] && cp -r usr/* ../clean_root/usr/ 2>/dev/null || true
-          cd ..
+        # 【2. 自动化智能抓取 luci-mod-admin-full】
+        echo "正在智能搜寻 luci-mod-admin-full..."
+        MOD_NAME=$(grep -oE 'luci-mod-admin-full[-_][0-9a-zA-Z\._~-]+\.(apk|ipk)' index.html | head -n 1)
+        if [ -n "$MOD_NAME" ]; then
+          echo "成功抓取到今日最新文件: $MOD_NAME"
+          wget -q "https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/$MOD_NAME"
+          mkdir -p mod_out
+          7z x "$MOD_NAME" -omod_out/ -y >/dev/null
+          if [ -f "mod_out/data.tar.gz" ]; then 7z x mod_out/data.tar.gz -omod_out/ -y >/dev/null; fi
+          if [ -f "mod_out/data.tar.xz" ]; then 7z x mod_out/data.tar.xz -omod_out/ -y >/dev/null; fi
+          find mod_out/ -name "data.tar" -exec 7z x {} -omod_out/ -y \; >/dev/null
+          
+          # 合并真网页肉身
+          if [ -d "mod_out/www" ]; then
+            mkdir -p clean_root/www
+            cp -r mod_out/www/* clean_root/www/ 2>/dev/null || true
+          fi
+          if [ -d "mod_out/usr" ]; then
+            mkdir -p clean_root/usr
+            cp -r mod_out/usr/* clean_root/usr/ 2>/dev/null || true
+          fi
+        else
+          echo "错误：官网没有找到 luci-mod-admin-full！"
         fi
 
-        # 3. 合并你原本仓库里的自定义大门和脚本
+        # 【3. 强行缝合你原本仓库里的自定义免流大门/控制脚本】
+        echo "正在缝合自定义脚本..."
         [ -d "www" ] && cp -r www/* clean_root/www/ 2>/dev/null || true
         [ -d "etc" ] && cp -r etc clean_root/ 2>/dev/null || true
         [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/ 2>/dev/null || true
+        [ -f "upgrade.sh" ] && cp upgrade.sh clean_root/ 2>/dev/null || true
         
-        # 统一赋权
+        # 强制给控制台可执行权限
         chmod -R 0755 clean_root/www/cgi-bin/ 2>/dev/null || true
-        chmod 0755 clean_root/plugin_boot.sh 2>/dev/null || true
+        if [ -f "clean_root/plugin_boot.sh" ]; then chmod 0755 clean_root/plugin_boot.sh; fi
         
-        # 开始打包
+        # 强行打包成最终成果物
         cd clean_root
         tar -zcvf ../u60pro_luci.tar.gz *
         cd ..
         
-        echo "=== 云端强拆打包完成，检查体积 ==="
+        echo "=== 最终打包成功！体积核对 ==="
         ls -lh u60pro_luci.tar.gz
 
-    - name: 3. 发布到 Release
+    - name: 4. 发布到 Release 成果物下载区
       uses: ncipollo/release-action@v1
       with:
         artifacts: "u60pro_luci.tar.gz"
         tag: "2026.07.09-1337"
         name: "2026.07.09-1337"
-        body: "Linux云端强拆缝合包"
+        body: "全自动智能抓取天灵最新全家桶固化包"
         allowUpdates: true
         removeArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
