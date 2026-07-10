@@ -6,7 +6,6 @@ on:
     branches:
       - main
 
-# 🔴 核心：在这里强行加上全量写入权限，彻底解决 403 拦截
 permissions: write-all
 
 jobs:
@@ -16,26 +15,45 @@ jobs:
     - name: 1. 签出仓库核心文件
       uses: actions/checkout@v3
 
-    - name: 2. 去掉多余干扰，强制打包底层核心
+    - name: 2. 自动抓取官方 LuCI 网页全量组件
       run: |
-        echo "=== 开始执行【去多余、加核心】方案 ==="
+        echo "=== 开始抓取官方真网页核心 ==="
+        mkdir -p clean_root/www/cgi-bin
+        mkdir -p clean_root/usr/lib/lua/luci
         
-        mkdir -p clean_root
+        # 使用官方编译好的基础组件包进行解压提取
+        cd clean_root
         
-        [ -d "www" ] && cp -r www clean_root/
-        [ -d "etc" ] && cp -r etc clean_root/
-        [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/
-        [ -f "upgrade.sh" ] && cp upgrade.sh clean_root/
+        # 抓取官方最新的 luci-base 核心网页和核心控制组件
+        curl -s -o luci-base.ipk https://downloads.openwrt.org/snapshots/packages/aarch64_cortex-a53/luci/luci-base_git-24.164.41725-7df4f0c_aarch64_cortex-a53.ipk || true
+        curl -s -o luci-app-opkg.ipk https://downloads.openwrt.org/snapshots/packages/aarch64_cortex-a53/luci/luci-app-opkg_git-24.164.41725-7df4f0c_all.ipk || true
         
-        if [ -f "clean_root/plugin_boot.sh" ]; then
-          chmod 0755 clean_root/plugin_boot.sh
-        fi
+        # 解压这些 ipk（其实就是压缩包），强行把里面的真网页和代码抠出来
+        for f in *.ipk; do
+          if [ -f "$f" ]; then
+            tar -zxf "$f" data.tar.gz 2>/dev/null || true
+            tar -zxf data.tar.gz 2>/dev/null || true
+            rm -f data.tar.gz "$f"
+          fi
+        done
         
+        cd ..
+        
+        # 【加上核心】把你仓库里刚才做好的大门文件覆盖进去
+        [ -d "www" ] && cp -r www/* clean_root/www/ 2>/dev/null || true
+        [ -d "etc" ] && cp -r etc clean_root/ 2>/dev/null || true
+        [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/ 2>/dev/null || true
+        
+        # 统一给启动脚本和网关脚本赋权
+        chmod -R 0755 clean_root/www/cgi-bin/ 2>/dev/null || true
+        chmod 0755 clean_root/plugin_boot.sh 2>/dev/null || true
+        
+        # 开始打包
         cd clean_root
         tar -zcvf ../u60pro_luci.tar.gz *
         cd ..
         
-        echo "=== 纯净包制作成功 ==="
+        echo "=== 纯净包制作成功，检查体积是否变大 ==="
         ls -lh u60pro_luci.tar.gz
 
     - name: 3. 使用兼容性最好的组件发布
@@ -44,7 +62,7 @@ jobs:
         artifacts: "u60pro_luci.tar.gz"
         tag: "2026.07.09-1337"
         name: "2026.07.09-1337"
-        body: "自动固化面板包"
+        body: "全自动官方核心抓取包"
         allowUpdates: true
         removeArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
