@@ -1,4 +1,4 @@
-name: 固化打包部署中兴U60P天灵面板
+name: 云端强拆天灵面板并固化打包
 
 on:
   workflow_dispatch:
@@ -12,41 +12,40 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: 1. 签出仓库核心文件
+    - name: 1. 签出仓库文件
       uses: actions/checkout@v3
 
-    - name: 2. 自动抓取 ImmortalWrt（天灵）全量网页核心
+    - name: 2. 利用 Linux 祖宗级命令强拆 APK/IPK 包
       run: |
-        echo "=== 开始抓取天灵高通架构真网页核心 ==="
+        echo "=== 开始在 Linux 环境下强拆天灵核心 ==="
         mkdir -p clean_root
-        cd clean_root
         
-        # 核心：使用天灵官方国内优化源，直接抓取天灵的 luci-base 核心
-        # 如果这个具体快照版本号有微调，我们直接用包含匹配
-        IMM_LUCI_BASE=$(curl -s https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/ | grep -o 'luci-base_[^"’]*\.ipk' | head -n 1)
-        IMM_LUCI_MOD=$(curl -s https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/ | grep -o 'luci-mod-admin-full_[^"’]*\.ipk' | head -n 1)
-        
-        echo "正在抓取天灵核心组件: $IMM_LUCI_BASE 和 $IMM_LUCI_MOD"
-        
-        if [ ! -z "$IMM_LUCI_BASE" ]; then
-          curl -L -o luci-base.ipk "https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/$IMM_LUCI_BASE"
+        # 1. 新建一个临时目录用来解压 luci-base
+        mkdir -p base_tmp
+        # 如果你上传的文件名叫 luci-base.apk，直接用 ar x 强拆（Linux 下 ar 是自带的必杀技，绝不提示加密）
+        if [ -f "luci-base.apk" ]; then
+          cp luci-base.apk base_tmp/ && cd base_tmp
+          ar x luci-base.apk 2>/dev/null || tar -xf luci-base.apk 2>/dev/null || true
+          [ -f "data.tar.gz" ] && tar -zxf data.tar.gz || true
+          [ -f "data.tar.xz" ] && tar -Jxf data.tar.xz || true
+          [ -d "www" ] && cp -r www ../clean_root/ || true
+          [ -d "usr" ] && cp -r usr ../clean_root/ || true
+          cd ..
         fi
-        if [ ! -z "$IMM_LUCI_MOD" ]; then
-          curl -L -o luci-mod.ipk "https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/$IMM_LUCI_MOD"
+
+        # 2. 同样的方法强拆 luci-mod
+        mkdir -p mod_tmp
+        if [ -f "luci-mod.apk" ]; then
+          cp luci-mod.apk mod_tmp/ && cd mod_tmp
+          ar x luci-mod.apk 2>/dev/null || tar -xf luci-mod.apk 2>/dev/null || true
+          [ -f "data.tar.gz" ] && tar -zxf data.tar.gz || true
+          [ -f "data.tar.xz" ] && tar -Jxf data.tar.xz || true
+          [ -d "www" ] && cp -r www/* ../clean_root/www/ 2>/dev/null || true
+          [ -d "usr" ] && cp -r usr/* ../clean_root/usr/ 2>/dev/null || true
+          cd ..
         fi
-        
-        # 解压天灵包，强行剥离出 www 网页和 usr 控制逻辑
-        for f in *.ipk; do
-          if [ -f "$f" ]; then
-            tar -zxf "$f" data.tar.gz 2>/dev/null || true
-            tar -zxf data.tar.gz 2>/dev/null || true
-            rm -f data.tar.gz "$f"
-          fi
-        done
-        
-        cd ..
-        
-        # 【加上核心】把你仓库里刚才做好的本地大门文件合并进去
+
+        # 3. 合并你原本仓库里的自定义大门和脚本
         [ -d "www" ] && cp -r www/* clean_root/www/ 2>/dev/null || true
         [ -d "etc" ] && cp -r etc clean_root/ 2>/dev/null || true
         [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/ 2>/dev/null || true
@@ -60,16 +59,16 @@ jobs:
         tar -zcvf ../u60pro_luci.tar.gz *
         cd ..
         
-        echo "=== 天灵纯净全量包制作成功 ==="
+        echo "=== 云端强拆打包完成，检查体积 ==="
         ls -lh u60pro_luci.tar.gz
 
-    - name: 3. 使用兼容性最好的组件发布
+    - name: 3. 发布到 Release
       uses: ncipollo/release-action@v1
       with:
         artifacts: "u60pro_luci.tar.gz"
         tag: "2026.07.09-1337"
         name: "2026.07.09-1337"
-        body: "天灵全家桶核心自动抓取包"
+        body: "Linux云端强拆缝合包"
         allowUpdates: true
         removeArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
