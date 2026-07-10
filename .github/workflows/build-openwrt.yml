@@ -35,10 +35,13 @@ jobs:
         echo "=== 纯净包制作成功 ==="
         ls -lh u60pro_luci.tar.gz
 
-    - name: 3. 使用官方原生命令发布（彻底去掉第三方组件）
+    - name: 3. 使用官方原生命令发布（先删后建，彻底避开老版本参数）
       run: |
-        echo "正在强行覆盖发布到 Release..."
-        # 自动覆盖旧的标签，强制把真包塞进 Release 附件
-        gh release create "2026.07.09-1337" u60pro_luci.tar.gz --title "2026.07.09-1337" --notes "自动固化包" --clobber
+        echo "正在执行安全覆盖发布..."
+        # 如果之前有这个版本的 Release，直接干掉它（允许失败，没有也不报错）
+        gh release delete "2026.07.09-1337" --yes 2>/dev/null || true
+        
+        # 重新创建并上传真包（去掉 --clobber 参数，完美兼容老版本）
+        gh release create "2026.07.09-1337" u60pro_luci.tar.gz --title "2026.07.09-1337" --notes "自动固化包"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
