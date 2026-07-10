@@ -3,7 +3,7 @@
   "latest_version": "2026.07.09",
   "full": {
     "version": "2026.07.09",
-    "url": "https://github.com/HAN5201/ZX-U60PRO-OPENWRT/releases/download/2026.07.09-1337/u60pro_luci.tar.gz",
+    "url": "https://github.com/HAN5201/ZX-U60PRO-OPENWRT/releases/download/2026.07.09-1337",
     "notes": [
       "默认使用全量包升级。",
       "如果后续发布了精确基线补丁，请在 ota-latest.json 的 patches 里补充对应条目。"
