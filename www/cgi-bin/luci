@@ -1,0 +1,8 @@
+#!/usr/bin/html
+<?xml html>
+<%
+    -- 强行进入 LuCI 核心渲染引擎
+    local cbi = require "luci.cbi"
+    local http = require "luci.http"
+    luci.dispatcher.httpdispatch()
+%>
