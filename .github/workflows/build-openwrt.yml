@@ -17,34 +17,28 @@ jobs:
       run: |
         echo "=== 开始执行【去多余、加核心】方案 ==="
         
-        # 强制创建纯净的临时打包根目录，防止重复嵌套
         mkdir -p clean_root
         
-        # 【加上核心】把你在仓库里精心准备好的这三个骨架直接塞进去
         [ -d "www" ] && cp -r www clean_root/
         [ -d "etc" ] && cp -r etc clean_root/
         [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/
         [ -f "upgrade.sh" ] && cp upgrade.sh clean_root/
         
-        # 赋予启动脚本最高执行权限
         if [ -f "clean_root/plugin_boot.sh" ]; then
           chmod 0755 clean_root/plugin_boot.sh
         fi
         
-        # 原地打包，确保随身WiFi解压时直接能看到这三个文件
         cd clean_root
         tar -zcvf ../u60pro_luci.tar.gz *
         cd ..
         
-        echo "=== 纯净包制作成功，最终体积大小 ==="
+        echo "=== 纯净包制作成功 ==="
         ls -lh u60pro_luci.tar.gz
 
-    - name: 3. 覆盖发布到固件 Releases 区
-      uses: softprops/action-release@v1
-      if: success()
-      with:
-        tag_name: 2026.07.09-1337
-        overwrite: true
-        files: u60pro_luci.tar.gz
+    - name: 3. 使用官方原生命令发布（彻底去掉第三方组件）
+      run: |
+        echo "正在强行覆盖发布到 Release..."
+        # 自动覆盖旧的标签，强制把真包塞进 Release 附件
+        gh release create "2026.07.09-1337" u60pro_luci.tar.gz --title "2026.07.09-1337" --notes "自动固化包" --clobber
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
