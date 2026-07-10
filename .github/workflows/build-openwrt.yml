@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+# 🔴 核心：在这里强行加上全量写入权限，彻底解决 403 拦截
+permissions: write-all
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,7 +38,7 @@ jobs:
         echo "=== 纯净包制作成功 ==="
         ls -lh u60pro_luci.tar.gz
 
-    - name: 3. 使用兼容性最好的组件发布（彻底解决403与找不到问题）
+    - name: 3. 使用兼容性最好的组件发布
       uses: ncipollo/release-action@v1
       with:
         artifacts: "u60pro_luci.tar.gz"
