@@ -1,8 +1,23 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>U60PRO OpenWrt 后台</title></head>
-<body style="text-align:center;padding-top:50px;background:#f0f2f5;font-family:sans-serif;">
-    <h1>🎉 恭喜你！成功进入中兴 U60Pro 网页管理后台！</h1>
-    <p>当前后台正在底层安全运行。</p>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中兴 U60P OpenWrt 后台</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f0f2f5; text-align: center; padding-top: 100px; color: #333; }
+        .card { background: white; max-width: 400px; margin: 0 auto; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { font-size: 24px; color: #1890ff; margin-bottom: 10px; }
+        .btn { display: inline-block; background: #1890ff; color: white; padding: 10px 20px; border-radius: 4px; text-decoration: none; margin-top: 20px; font-weight: bold; }
+        .btn:hover { background: #40a9ff; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>中兴 U60P 控制面板</h1>
+        <p>恭喜，核心网页环境已成功拉起！</p>
+        <p style="font-size: 13px; color: #666;">底层 Web 守护进程运行正常</p>
+        <a href="/cgi-bin/luci" class="btn">进入系统高级管理</a>
+    </div>
 </body>
 </html>
