@@ -1,4 +1,4 @@
-name: 固化打包并自动生成校验提示文件
+name: 固化打包并纠正文件路径结构
 
 on:
   workflow_dispatch:
@@ -15,61 +15,74 @@ jobs:
     - name: 1. 签出仓库核心文件
       uses: actions/checkout@v3
 
-    - name: 2. 打包本地真网页并现场生成提示文件
+    - name: 2. 强力对齐路径并现场打包
       run: |
-        echo "=== 开始打包本地真网页肉身 ==="
-        mkdir -p clean_root
+        echo "=== 开始路径绝对防御检查 ==="
         
-        # 强行把你手动传上去的真 www、etc 塞进包里
-        [ -d "www" ] && cp -r www clean_root/
-        [ -d "etc" ] && cp -r etc clean_root/
-        [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/
-        [ -f "upgrade.sh" ] && cp upgrade.sh clean_root/
+        # 创建一个绝对干净的临时目录，模拟设备根目录层级
+        mkdir -p final_pack
         
-        if [ -f "clean_root/plugin_boot.sh" ]; then
-          chmod 0755 clean_root/plugin_boot.sh
+        # 【关键步骤：纠正路径】
+        # 判断你仓库里上传的 www、etc、usr 是直接在根目录，还是卡在 clean_root 里
+        if [ -d "clean_root" ]; then
+          echo "发现 clean_root 目录，正在提取内层肉身..."
+          [ -d "clean_root/www" ] && cp -r clean_root/www final_pack/
+          [ -d "clean_root/etc" ] && cp -r clean_root/etc final_pack/
+          [ -d "clean_root/usr" ] && cp -r clean_root/usr final_pack/
+          [ -f "clean_root/plugin_boot.sh" ] && cp clean_root/plugin_boot.sh final_pack/
+          [ -f "clean_root/upgrade.sh" ] && cp clean_root/upgrade.sh final_pack/
         fi
         
-        # 【核心操作：打包主程序】
-        cd clean_root
+        # 如果你直接把 www、usr 传在仓库根目录，也给它抓进来
+        [ -d "www" ] && cp -r www final_pack/
+        [ -d "etc" ] && cp -r etc final_pack/
+        [ -d "usr" ] && cp -r usr final_pack/
+        [ -f "plugin_boot.sh" ] && cp plugin_boot.sh final_pack/
+        [ -f "upgrade.sh" ] && cp upgrade.sh final_pack/
+        
+        # 兜底建立版本号文件
+        echo "2026.07.09" > final_pack/VERSION
+        
+        # 核心权限修复：确保启动脚本在 Linux 下有执行权
+        if [ -f "final_pack/plugin_boot.sh" ]; then
+          chmod 0755 final_pack/plugin_boot.sh
+        fi
+        if [ -f "final_pack/usr/sbin/uhttpd" ]; then
+          chmod 0755 final_pack/usr/sbin/uhttpd
+        fi
+        
+        echo "=== 检查即将打包的文件结构 ==="
+        ls -R final_pack
+        
+        # 【核心操作：进到 final_pack 肚子里打包，确保解压出来没有多余的父目录】
+        cd final_pack
         tar -zcvf ../u60pro_luci.tar.gz *
         cd ..
         
-        echo "=== === 开始现场生成各种校验提示文件 === ==="
-        
-        # 1. 生成标准的 MD5 提示文件 (很多脚本靠这个对比)
+        echo "=== 现场生成最新的校验提示身份证 ==="
         md5sum u60pro_luci.tar.gz | awk '{print $1}' > u60pro_luci.tar.gz.md5
-        
-        # 2. 生成带文件名的 MD5 提示文件 (双保险)
         md5sum u60pro_luci.tar.gz > u60pro_luci.md5
-        
-        # 3. 现场计算文件大小并生成体积提示文本
         wc -c < u60pro_luci.tar.gz | tr -d '[:space:]' > u60pro_luci.size
         
-        # 4. 如果随身WiFi后台是通过 json 校验的，顺便生成一个最新的 ota 提示配置文件
         FILE_SIZE=$(wc -c < u60pro_luci.tar.gz | tr -d '[:space:]')
         FILE_MD5=$(md5sum u60pro_luci.tar.gz | awk '{print $1}')
-        
         cat <<EOF > ota-latest.json
         {
-          "version": "1.1.0",
+          "version": "2026.07.09",
           "size": $FILE_SIZE,
           "md5": "$FILE_MD5",
           "file": "u60pro_luci.tar.gz",
-          "log": "全量本地面板固化修复包"
+          "log": "路径绝对修正部署包"
         }
         EOF
-        
-        echo "=== 检查生成的全部提示成果物 ==="
-        ls -lh u60pro_luci.tar.gz* ota-latest.json u60pro_luci.md5 u60pro_luci.size 2>/dev/null || true
 
-    - name: 3. 把安装包和全部提示文件发布到 Release
+    - name: 3. 发布全套完工资产到 Release
       uses: ncipollo/release-action@v1
       with:
         artifacts: "u60pro_luci.tar.gz,u60pro_luci.tar.gz.md5,u60pro_luci.md5,u60pro_luci.size,ota-latest.json"
         tag: "2026.07.09-1337"
         name: "2026.07.09-1337"
-        body: "包含自动生成的最新 MD5、Size 提示校验文件，专治全量包校验失败。"
+        body: "修复了打包时目录错位、uhttpd找不到的路径顽疾。"
         allowUpdates: true
         removeArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
