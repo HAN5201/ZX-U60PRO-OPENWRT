@@ -1,74 +1,50 @@
-name: U60p Qualcomm Build
+name: 固化打包部署中兴U60P面板
 
 on:
   workflow_dispatch:
-
-# 🔑 核心修正：直接在工作流级别强制开启 Release 写入权限
-permissions:
-  contents: write
+  push:
+    branches:
+      - main
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    - name: 1. 签出仓库核心文件
+      uses: actions/checkout@v3
 
-    - name: Package LuCI via Upstream Binaries
-      id: pack_u60p
+    - name: 2. 去掉多余干扰，强制打包底层核心
       run: |
-        mkdir -p $GITHUB_WORKSPACE/u60pro_luci
-        cd $GITHUB_WORKSPACE/u60pro_luci
+        echo "=== 开始执行【去多余、加核心】方案 ==="
+        
+        # 强制创建纯净的临时打包根目录，防止重复嵌套
+        mkdir -p clean_root
+        
+        # 【加上核心】把你在仓库里精心准备好的这三个骨架直接塞进去
+        [ -d "www" ] && cp -r www clean_root/
+        [ -d "etc" ] && cp -r etc clean_root/
+        [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/
+        [ -f "upgrade.sh" ] && cp upgrade.sh clean_root/
+        
+        # 赋予启动脚本最高执行权限
+        if [ -f "clean_root/plugin_boot.sh" ]; then
+          chmod 0755 clean_root/plugin_boot.sh
+        fi
+        
+        # 原地打包，确保随身WiFi解压时直接能看到这三个文件
+        cd clean_root
+        tar -zcvf ../u60pro_luci.tar.gz *
+        cd ..
+        
+        echo "=== 纯净包制作成功，最终体积大小 ==="
+        ls -lh u60pro_luci.tar.gz
 
-        # 1. 换用稳定轻量组件源
-        echo "[1/4] 下载官方轻量 LuCI 镜像核心..."
-        wget -qO core.tar.gz https://downloads.immortalwrt.org/releases/23.05.3/targets/x86/64/immortalwrt-23.05.3-x86-64-rootfs.tar.gz
-        tar -xzf core.tar.gz ./www ./etc/config ./usr/libexec/luci-bwc 2>/dev/null || true
-        rm -f core.tar.gz
-
-        # 补齐必要基础轻量结构
-        mkdir -p etc/config www/cgi-bin
-
-        # 2. 注入你要求的网络与安全配置 (IP: 192.168.0.1, 端口: 8080)
-        echo "[2/4] 注入网关与端口重定向配置..."
-        printf "config interface 'lan'\n\toption ipaddr '192.168.0.1'\n\toption netmask '255.255.255.0'\n" > etc/config/network
-        printf "config uhttpd 'main'\n\tlist listen_http '0.0.0.0:8080'\n\toption home '/www'\n" > etc/config/uhttpd
-
-        # 3. 强行注入默认登录密码为 root
-        echo "[3/4] 注入 root 加密密码密文..."
-        mkdir -p etc
-        printf "root:\$1\$wEftA4St\$VclSgNqyKlD8gXmTeoNo.0:19850:0:99999:7:::\n" > etc/shadow
-
-        # 写入版本号
-        echo "1.1.0" > VERSION
-
-        # 4. 精确打包：严格适配你 JS 脚本解压后直读的核心路径
-        echo "[4/4] 压制符合 U60p JS 脚本标准的压缩包..."
-        cd $GITHUB_WORKSPACE
-        tar -czf u60pro_luci.tar.gz u60pro_luci
-
-        mkdir -p bin_output
-        mv u60pro_luci.tar.gz bin_output/
-        echo "FIRMWARE=$GITHUB_WORKSPACE/bin_output" >> $GITHUB_ENV
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: Generate release tag
-      id: tag
-      if: steps.pack_u60p.outputs.status == 'success'
-      run: |
-        echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: Upload u60pro_luci.tar.gz to Release
-      uses: softprops/action-gh-release@v2
-      if: steps.tag.outputs.status == 'success'
+    - name: 3. 覆盖发布到固件 Releases 区
+      uses: softprops/action-release@v1
+      if: success()
       with:
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        files: ${{ env.FIRMWARE }}/*
-        body: |
-          ### 🛰️ U60p 随身Wi-Fi 专属 LuCI 挂载包发布
-          * 编译时间: ${{ steps.tag.outputs.release_tag }}
-          * 文件包名: `u60pro_luci.tar.gz`
-          * 默认网关: 192.168.0.1:8080
-          * 默认密码: root
+        tag_name: 2026.07.09-1337
+        overwrite: true
+        files: u60pro_luci.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
