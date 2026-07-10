@@ -1,4 +1,4 @@
-name: 全自动智能抓取天灵面板并固化打包
+name: 固化打包并自动生成校验提示文件
 
 on:
   workflow_dispatch:
@@ -15,91 +15,61 @@ jobs:
     - name: 1. 签出仓库核心文件
       uses: actions/checkout@v3
 
-    - name: 2. 安装全能解压神器 (7-Zip Linux版)
+    - name: 2. 打包本地真网页并现场生成提示文件
       run: |
-        sudo apt-get update
-        sudo apt-get install -y p7zip-full curl wget
-
-    - name: 3. 智能追踪并强拆官网最新天灵核心
-      run: |
-        echo "=== 正在进入天灵官方高通大池子 ==="
+        echo "=== 开始打包本地真网页肉身 ==="
         mkdir -p clean_root
         
-        # 抓取天灵快照官网的实时网页列表
-        curl -s https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/ > index.html
+        # 强行把你手动传上去的真 www、etc 塞进包里
+        [ -d "www" ] && cp -r www clean_root/
+        [ -d "etc" ] && cp -r etc clean_root/
+        [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/
+        [ -f "upgrade.sh" ] && cp upgrade.sh clean_root/
         
-        # 【1. 自动化智能抓取 luci-base】
-        echo "正在智能搜寻 luci-base..."
-        BASE_NAME=$(grep -oE 'luci-base[-_][0-9a-zA-Z\._~-]+\.(apk|ipk)' index.html | head -n 1)
-        if [ -n "$BASE_NAME" ]; then
-          echo "成功抓取到今日最新文件: $BASE_NAME"
-          wget -q "https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/$BASE_NAME"
-          mkdir -p base_out
-          # 使用 7z 降维打击，无视 apk 或 ipk 强行提取内部所有层级
-          7z x "$BASE_NAME" -obase_out/ -y >/dev/null
-          if [ -f "base_out/data.tar.gz" ]; then 7z x base_out/data.tar.gz -obase_out/ -y >/dev/null; fi
-          if [ -f "base_out/data.tar.xz" ]; then 7z x base_out/data.tar.xz -obase_out/ -y >/dev/null; fi
-          # 提取出最深层的底层归档
-          find base_out/ -name "data.tar" -exec 7z x {} -obase_out/ -y \; >/dev/null
-          
-          # 复制真网页肉身
-          [ -d "base_out/www" ] && cp -r base_out/www clean_root/ || true
-          [ -d "base_out/usr" ] && cp -r base_out/usr clean_root/ || true
-        else
-          echo "错误：官网没有找到 luci-base！"
+        if [ -f "clean_root/plugin_boot.sh" ]; then
+          chmod 0755 clean_root/plugin_boot.sh
         fi
-
-        # 【2. 自动化智能抓取 luci-mod-admin-full】
-        echo "正在智能搜寻 luci-mod-admin-full..."
-        MOD_NAME=$(grep -oE 'luci-mod-admin-full[-_][0-9a-zA-Z\._~-]+\.(apk|ipk)' index.html | head -n 1)
-        if [ -n "$MOD_NAME" ]; then
-          echo "成功抓取到今日最新文件: $MOD_NAME"
-          wget -q "https://downloads.immortalwrt.org/snapshots/packages/aarch64_cortex-a53/luci/$MOD_NAME"
-          mkdir -p mod_out
-          7z x "$MOD_NAME" -omod_out/ -y >/dev/null
-          if [ -f "mod_out/data.tar.gz" ]; then 7z x mod_out/data.tar.gz -omod_out/ -y >/dev/null; fi
-          if [ -f "mod_out/data.tar.xz" ]; then 7z x mod_out/data.tar.xz -omod_out/ -y >/dev/null; fi
-          find mod_out/ -name "data.tar" -exec 7z x {} -omod_out/ -y \; >/dev/null
-          
-          # 合并真网页肉身
-          if [ -d "mod_out/www" ]; then
-            mkdir -p clean_root/www
-            cp -r mod_out/www/* clean_root/www/ 2>/dev/null || true
-          fi
-          if [ -d "mod_out/usr" ]; then
-            mkdir -p clean_root/usr
-            cp -r mod_out/usr/* clean_root/usr/ 2>/dev/null || true
-          fi
-        else
-          echo "错误：官网没有找到 luci-mod-admin-full！"
-        fi
-
-        # 【3. 强行缝合你原本仓库里的自定义免流大门/控制脚本】
-        echo "正在缝合自定义脚本..."
-        [ -d "www" ] && cp -r www/* clean_root/www/ 2>/dev/null || true
-        [ -d "etc" ] && cp -r etc clean_root/ 2>/dev/null || true
-        [ -f "plugin_boot.sh" ] && cp plugin_boot.sh clean_root/ 2>/dev/null || true
-        [ -f "upgrade.sh" ] && cp upgrade.sh clean_root/ 2>/dev/null || true
         
-        # 强制给控制台可执行权限
-        chmod -R 0755 clean_root/www/cgi-bin/ 2>/dev/null || true
-        if [ -f "clean_root/plugin_boot.sh" ]; then chmod 0755 clean_root/plugin_boot.sh; fi
-        
-        # 强行打包成最终成果物
+        # 【核心操作：打包主程序】
         cd clean_root
         tar -zcvf ../u60pro_luci.tar.gz *
         cd ..
         
-        echo "=== 最终打包成功！体积核对 ==="
-        ls -lh u60pro_luci.tar.gz
+        echo "=== === 开始现场生成各种校验提示文件 === ==="
+        
+        # 1. 生成标准的 MD5 提示文件 (很多脚本靠这个对比)
+        md5sum u60pro_luci.tar.gz | awk '{print $1}' > u60pro_luci.tar.gz.md5
+        
+        # 2. 生成带文件名的 MD5 提示文件 (双保险)
+        md5sum u60pro_luci.tar.gz > u60pro_luci.md5
+        
+        # 3. 现场计算文件大小并生成体积提示文本
+        wc -c < u60pro_luci.tar.gz | tr -d '[:space:]' > u60pro_luci.size
+        
+        # 4. 如果随身WiFi后台是通过 json 校验的，顺便生成一个最新的 ota 提示配置文件
+        FILE_SIZE=$(wc -c < u60pro_luci.tar.gz | tr -d '[:space:]')
+        FILE_MD5=$(md5sum u60pro_luci.tar.gz | awk '{print $1}')
+        
+        cat <<EOF > ota-latest.json
+        {
+          "version": "1.1.0",
+          "size": $FILE_SIZE,
+          "md5": "$FILE_MD5",
+          "file": "u60pro_luci.tar.gz",
+          "log": "全量本地面板固化修复包"
+        }
+        EOF
+        
+        echo "=== 检查生成的全部提示成果物 ==="
+        ls -lh u60pro_luci.tar.gz* ota-latest.json u60pro_luci.md5 u60pro_luci.size 2>/dev/null || true
 
-    - name: 4. 发布到 Release 成果物下载区
+    - name: 3. 把安装包和全部提示文件发布到 Release
       uses: ncipollo/release-action@v1
       with:
-        artifacts: "u60pro_luci.tar.gz"
+        artifacts: "u60pro_luci.tar.gz,u60pro_luci.tar.gz.md5,u60pro_luci.md5,u60pro_luci.size,ota-latest.json"
         tag: "2026.07.09-1337"
         name: "2026.07.09-1337"
-        body: "全自动智能抓取天灵最新全家桶固化包"
+        body: "包含自动生成的最新 MD5、Size 提示校验文件，专治全量包校验失败。"
         allowUpdates: true
         removeArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
